@@ -1,6 +1,7 @@
 """agent.py — Cortiq Decision Copilot v2
-Orchestrates multi-step research with gap detection and follow-up queries.
+Orchestrates multi-step research with parallel execution, gap detection, and follow-up queries.
 """
+import asyncio
 import json
 import os
 import time
@@ -35,6 +36,18 @@ def build_startup_queries(name: str, url: str, thesis: str) -> list[str]:
     ]
 
 
+async def _search_async(query: str) -> List[Dict]:
+    """Run search_topic in a thread pool to avoid blocking the event loop."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, search_topic, query)
+
+
+async def _run_queries_parallel(queries: List[str]) -> List[Dict]:
+    """Execute all queries concurrently and flatten results."""
+    results_nested = await asyncio.gather(*[_search_async(q) for q in queries])
+    return [r for results in results_nested for r in results]
+
+
 async def _gap_check(topic: str, mode: str, results: List[Dict]) -> List[str]:
     """Use Claude Haiku to identify research gaps and return follow-up queries."""
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -45,7 +58,6 @@ async def _gap_check(topic: str, mode: str, results: List[Dict]) -> List[str]:
         from anthropic import AsyncAnthropic
         client = AsyncAnthropic(api_key=api_key)
 
-        # Summarize what we have
         found = "\n".join(
             f"- {r['title']}: {r['content'][:80]}"
             for r in results[:12]
@@ -106,27 +118,24 @@ async def run_equity_analysis(
     queries = build_equity_queries(ticker, thesis)
     yield "queries", json.dumps(queries, ensure_ascii=False)
 
-    all_results = []
-    for i, query in enumerate(queries, 1):
-        yield "status", f"[{i}/{len(queries)}] {query[:65]}..."
-        results = search_topic(query)
-        all_results.extend(results)
+    yield "status", f"Pesquisando {len(queries)} fontes em paralelo..."
+    all_results = await _run_queries_parallel(queries)
+    yield "status", f"{len(all_results)} resultados coletados. Verificando lacunas..."
 
     # Gap detection
-    yield "status", "Identificando lacunas de pesquisa..."
     followup = await _gap_check(ticker, "equity", all_results)
     if followup:
         yield "followup_queries", json.dumps(followup, ensure_ascii=False)
-        for fq in followup:
-            yield "status", f"[follow-up] {fq[:65]}..."
-            results = search_topic(fq)
-            all_results.extend(results)
+        yield "status", f"Aprofundando {len(followup)} lacunas identificadas..."
+        extra = await _run_queries_parallel(followup)
+        all_results.extend(extra)
 
     all_results = deduplicate_results(all_results)
 
-    # Emit sources for citation linking in frontend
-    sources = [{"title": r["title"], "url": r["url"], "source_type": r.get("source_type", "web")}
-               for r in all_results[:20] if r.get("url")]
+    sources = [
+        {"title": r["title"], "url": r["url"], "source_type": r.get("source_type", "web")}
+        for r in all_results[:20] if r.get("url")
+    ]
     yield "sources", json.dumps(sources, ensure_ascii=False)
 
     yield "status", "Sintetizando análise com Claude..."
@@ -138,8 +147,10 @@ async def run_equity_analysis(
 
     full_report = "".join(report_chunks)
 
-    # Extract verdict for artifact
-    verdict_match = re.search(r'\*\*(TESE MANTIDA|TESE ALTERADA|TESE INVALIDADA|COMPRAR|MANTER|REDUZIR|VENDER)\*\*', full_report)
+    verdict_match = re.search(
+        r'\*\*(TESE MANTIDA|TESE ALTERADA|TESE INVALIDADA|COMPRAR|MANTER|REDUZIR|VENDER)\*\*',
+        full_report
+    )
     confidence_match = re.search(r'Confiança:\s*\*?\*?([A-ZÁÉÍÓÚÃÕ]+)\*?\*?', full_report)
 
     _save_artifact({
@@ -171,26 +182,24 @@ async def run_startup_analysis(
     queries = build_startup_queries(name, url, thesis)
     yield "queries", json.dumps(queries, ensure_ascii=False)
 
-    all_results = []
-    for i, query in enumerate(queries, 1):
-        yield "status", f"[{i}/{len(queries)}] {query[:65]}..."
-        results = search_topic(query)
-        all_results.extend(results)
+    yield "status", f"Pesquisando {len(queries)} fontes em paralelo..."
+    all_results = await _run_queries_parallel(queries)
+    yield "status", f"{len(all_results)} resultados coletados. Verificando lacunas..."
 
     # Gap detection
-    yield "status", "Identificando lacunas de pesquisa..."
     followup = await _gap_check(name, "startup", all_results)
     if followup:
         yield "followup_queries", json.dumps(followup, ensure_ascii=False)
-        for fq in followup:
-            yield "status", f"[follow-up] {fq[:65]}..."
-            results = search_topic(fq)
-            all_results.extend(results)
+        yield "status", f"Aprofundando {len(followup)} lacunas identificadas..."
+        extra = await _run_queries_parallel(followup)
+        all_results.extend(extra)
 
     all_results = deduplicate_results(all_results)
 
-    sources = [{"title": r["title"], "url": r["url"], "source_type": r.get("source_type", "web")}
-               for r in all_results[:20] if r.get("url")]
+    sources = [
+        {"title": r["title"], "url": r["url"], "source_type": r.get("source_type", "web")}
+        for r in all_results[:20] if r.get("url")
+    ]
     yield "sources", json.dumps(sources, ensure_ascii=False)
 
     yield "status", "Gerando VC memo com Claude..."
