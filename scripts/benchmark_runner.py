@@ -118,7 +118,14 @@ def run_benchmarks(version: str = "v4-dev", dry_run: bool = False) -> Dict:
         sys.path.append(BACKEND_DIR)
         from agent import run_equity_pipeline_sync, run_startup_pipeline_sync
 
-    for bench in _load_benchmarks():
+    benchmarks = _load_benchmarks()
+    # Em modo real, limitar a 2 casos (1 equity + 1 startup) para não exceder timeout
+    if not dry_run:
+        equity_cases = [b for b in benchmarks if b["mode"] == "stock"][:1]
+        startup_cases = [b for b in benchmarks if b["mode"] == "startup"][:1]
+        benchmarks = equity_cases + startup_cases
+
+    for bench in benchmarks:
         start = time.time()
         mode = bench["mode"]
 

@@ -39,8 +39,14 @@ async def run_experiment_stream(
 
     loop.run_in_executor(None, _run)
 
+    # keepalive: envia ping a cada 20s para manter conexão SSE aberta
+    # (necessário em modo real onde cada benchmark pode levar 1-3 min)
     while True:
-        event, data = await queue.get()
+        try:
+            event, data = await asyncio.wait_for(queue.get(), timeout=20.0)
+        except asyncio.TimeoutError:
+            yield ": keepalive\n\n"
+            continue
         sse_data = json.dumps(data, ensure_ascii=False)
         yield f"event: {event}\ndata: {sse_data}\n\n"
         if event in ("__done__", "__error__"):
