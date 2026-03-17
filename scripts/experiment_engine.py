@@ -98,11 +98,21 @@ def _update_lineage(entry: dict) -> None:
     _write_json(LINEAGE_PATH, data)
 
 
-def run_experiment(mutation_type: str | None = None, candidates: int = 3, dry_run: bool = True) -> dict:
+def run_experiment(
+    mutation_type: str | None = None,
+    candidates: int = 3,
+    dry_run: bool = True,
+    on_progress=None,   # callback(event: str, data: dict)
+) -> dict:
+    def _emit(event: str, data: dict):
+        if on_progress:
+            on_progress(event, data)
+
     os.makedirs(EXPER_DIR, exist_ok=True)
     exp_id = f"exp-{_now()}"
     exp_path = os.path.join(EXPER_DIR, exp_id)
     os.makedirs(exp_path, exist_ok=True)
+    _emit("start", {"exp_id": exp_id, "candidates": candidates, "dry_run": dry_run})
 
     state = _load_baseline_state()
     active_baseline = state.get("active_config", CONFIG_DIR)
@@ -115,6 +125,7 @@ def run_experiment(mutation_type: str | None = None, candidates: int = 3, dry_ru
     from proposer import propose_heuristic
 
     baseline_run = _run_benchmark(baseline_dir, "baseline", dry_run=dry_run)
+    _emit("baseline_done", {"run": baseline_run})
 
     candidate_runs = []
     candidate_logs = []
@@ -127,6 +138,13 @@ def run_experiment(mutation_type: str | None = None, candidates: int = 3, dry_ru
         cand_run = _run_benchmark(cand_dir, f"candidate_{idx+1}", dry_run=dry_run)
         compare = _compare(baseline_run, cand_run)
         decision, rationale = _promotion_gate(compare, _load_json(baseline_run), _load_json(cand_run))
+        _emit("candidate_done", {
+            "idx": idx + 1,
+            "mutation": mutation,
+            "decision": decision,
+            "rationale": rationale,
+            "aggregate_delta": compare.get("aggregate_delta", 0),
+        })
 
         candidate_runs.append(cand_run)
         candidate_logs.append({
@@ -173,6 +191,11 @@ def run_experiment(mutation_type: str | None = None, candidates: int = 3, dry_ru
         "dry_run": dry_run,
     }
 
+    _emit("done", {
+        "exp_id": exp_id,
+        "promoted": promotion["promoted"],
+        "best_delta": best_candidate["comparison"].get("aggregate_delta", 0) if best_candidate else 0,
+    })
     _write_json(os.path.join(exp_path, "experiment.json"), log)
     _update_leaderboard({
         "experiment_id": exp_id,
