@@ -1,6 +1,7 @@
 """main.py — Cortiq Decision Copilot v2
 FastAPI server with SSE streaming, daily briefing scheduler, and draft review API.
 """
+import asyncio
 import json
 import os
 import threading
@@ -60,6 +61,20 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 STATIC_DIR = os.path.join(FRONTEND_DIR, "static")
 
+PORTFOLIO_PATH = os.path.join(BASE_DIR, "data", "portfolio.json")
+
+def _load_portfolio():
+    os.makedirs(os.path.dirname(PORTFOLIO_PATH), exist_ok=True)
+    if not os.path.exists(PORTFOLIO_PATH):
+        return {"companies": []}
+    with open(PORTFOLIO_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+def _save_portfolio(data: dict):
+    os.makedirs(os.path.dirname(PORTFOLIO_PATH), exist_ok=True)
+    with open(PORTFOLIO_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Lab state (loop contínuo)
@@ -82,6 +97,12 @@ def briefing_page():
 @app.get("/lab")
 def lab_page():
     with open(os.path.join(FRONTEND_DIR, "lab.html"), encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
+
+@app.get("/portfolio")
+def portfolio_page():
+    with open(os.path.join(FRONTEND_DIR, "portfolio.html"), encoding="utf-8") as f:
         return HTMLResponse(f.read())
 
 
@@ -338,3 +359,101 @@ def lab_loop_start(interval_hours: int = 6):
 def lab_loop_stop():
     _lab_loop_state["running"] = False
     return {"ok": True, "message": "Loop parado."}
+
+
+# ── Portfolio API ──────────────────────────────────────────
+@app.get("/api/portfolio")
+def get_portfolio():
+    return _load_portfolio()
+
+
+@app.post("/api/portfolio")
+async def save_portfolio(request):
+    body = await request.json()
+    _save_portfolio(body)
+    return {"ok": True}
+
+
+@app.post("/api/portfolio/analyze")
+async def analyze_portfolio_companies():
+    import sys as _sys, uuid as _uuid
+    _sys.path.insert(0, BASE_DIR)
+    from agent import _collect_from_generator, run_equity_analysis, run_startup_analysis
+    from reporter import generate_brief_entry
+
+    portfolio = _load_portfolio()
+    companies = portfolio.get("companies", [])
+
+    async def gen():
+        if not companies:
+            yield f"event: done\ndata: {json.dumps({'total': 0})}\n\n"
+            return
+
+        async def analyze_one(item):
+            try:
+                if item["type"] == "equity":
+                    data = await _collect_from_generator(
+                        run_equity_analysis(item["name"])
+                    )
+                else:
+                    data = await _collect_from_generator(
+                        run_startup_analysis(item["name"], item.get("url", ""))
+                    )
+                sources = data.get("sources", [])
+                brief = await generate_brief_entry(sources, item["name"], item["type"])
+                return {"id": item.get("id",""), "name": item["name"], "type": item["type"], "brief": brief, "ok": True}
+            except Exception as e:
+                return {"id": item.get("id",""), "name": item["name"], "type": item["type"], "brief": f"Erro: {e}", "ok": False}
+
+        tasks = [asyncio.create_task(analyze_one(item)) for item in companies]
+        for task in asyncio.as_completed(tasks):
+            result = await task
+            yield f"event: result\ndata: {json.dumps(result, ensure_ascii=False)}\n\n"
+            # keepalive friendly — short pause between companies
+            await asyncio.sleep(0)
+        yield f"event: done\ndata: {json.dumps({'total': len(companies)})}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
+
+
+# ── Lab Evolution API ──────────────────────────────────────
+MUTATION_LABELS = {
+    "increase_primary_weight": ("Fontes primárias reforçadas", "Priorizamos fontes oficiais (B3, SEC, relatórios de RI) — análises mais fundamentadas em dados primários"),
+    "tighten_retry": ("Cobertura mais profunda", "Refinamos quando buscar dados adicionais — análises chegam mais completas"),
+    "loosen_retry": ("Velocidade otimizada", "Reduzimos buscas redundantes sem perder qualidade de cobertura"),
+    "boost_weak_coverage_weight": ("Tópicos escassos melhorados", "Melhoramos análise de seções com pouca evidência disponível no mercado"),
+    "reduce_weak_coverage_weight": ("Foco em profundidade", "Priorizamos qualidade sobre quantidade nos tópicos cobertos"),
+    "prioritize_traction_queries": ("Startups: tração em primeiro lugar", "Para startups, buscamos métricas reais de tração antes de qualquer outro dado"),
+    "decrease_coverage_weight": ("Evidência acima de cobertura", "Priorizamos qualidade das evidências sobre amplitude de cobertura"),
+}
+
+@app.get("/api/lab/evolution")
+def get_lab_evolution():
+    path = os.path.join(BASE_DIR, "leaderboard", "index.json")
+    if not os.path.exists(path):
+        return {"improvements": [], "total_experiments": 0, "total_improvements": 0}
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    exps = data.get("experiments", [])
+    improvements = []
+    for e in exps:
+        if e.get("decision") != "PROMOTED":
+            continue
+        mutation = e.get("mutation", {})
+        mtype = mutation.get("type", "")
+        label, description = MUTATION_LABELS.get(mtype, (mtype, "Otimização aplicada ao pipeline de research"))
+        delta = e.get("aggregate_delta") or 0
+        improvements.append({
+            "timestamp": e.get("timestamp", ""),
+            "label": label,
+            "description": description,
+            "delta": delta,
+            "mutation_type": mtype,
+        })
+    improvements.sort(key=lambda x: x["timestamp"], reverse=True)
+    return {
+        "improvements": improvements,
+        "total_experiments": len(exps),
+        "total_improvements": len(improvements),
+    }

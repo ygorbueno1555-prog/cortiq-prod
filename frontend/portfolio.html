@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cortiq — Portfólio</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    .pf-header { display:flex; align-items:center; gap:1rem; padding:1rem 1.5rem; border-bottom:1px solid var(--border,#2a2a2a); }
+    .pf-back { color:#7c6af7; text-decoration:none; font-size:.85rem; }
+    .pf-title { font-weight:700; font-size:1.1rem; letter-spacing:.05em; }
+
+    .pf-tabs { display:flex; gap:0; border-bottom:1px solid #2a2a2a; padding:0 1.5rem; }
+    .pf-tab { padding:.7rem 1.2rem; font-size:.85rem; font-weight:600; cursor:pointer; color:#666; border-bottom:2px solid transparent; background:none; border-top:none; border-left:none; border-right:none; }
+    .pf-tab.active { color:#7c6af7; border-bottom-color:#7c6af7; }
+
+    .pf-content { padding:1.5rem; }
+    .pf-section { display:none; }
+    .pf-section.active { display:block; }
+
+    /* Portfolio tab */
+    .add-form { display:flex; gap:.75rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem; padding:1rem; background:#111; border:1px solid #2a2a2a; border-radius:10px; }
+    .add-form .field { display:flex; flex-direction:column; gap:.3rem; }
+    .add-form label { font-size:.75rem; color:#888; }
+    .add-form select, .add-form input { background:#1a1a1a; border:1px solid #333; color:#eee; border-radius:6px; padding:.4rem .7rem; font-size:.85rem; }
+    .add-form input { width:180px; }
+    .btn-add { background:#7c6af7; color:#fff; border:none; border-radius:8px; padding:.45rem 1.1rem; font-weight:700; cursor:pointer; font-size:.85rem; white-space:nowrap; }
+    .btn-add:hover { background:#6a58e5; }
+
+    .companies-list { display:flex; flex-direction:column; gap:.5rem; margin-bottom:1.5rem; }
+    .company-item { display:flex; align-items:center; gap:.75rem; padding:.7rem 1rem; background:#111; border:1px solid #2a2a2a; border-radius:8px; }
+    .company-badge { font-size:.7rem; font-weight:700; padding:2px 7px; border-radius:4px; }
+    .badge-equity { background:#1e1a3a; color:#7c6af7; }
+    .badge-startup { background:#1a2e1a; color:#4ade80; }
+    .company-name { flex:1; font-weight:600; font-size:.9rem; }
+    .company-url { font-size:.75rem; color:#555; }
+    .btn-remove { background:none; border:none; color:#555; cursor:pointer; font-size:1rem; padding:0 .3rem; }
+    .btn-remove:hover { color:#f87171; }
+
+    .btn-analyze { background:#7c6af7; color:#fff; border:none; border-radius:10px; padding:.75rem 2rem; font-weight:700; font-size:.95rem; cursor:pointer; width:100%; margin-bottom:1.5rem; }
+    .btn-analyze:hover { background:#6a58e5; }
+    .btn-analyze:disabled { opacity:.4; cursor:not-allowed; }
+
+    .results-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:1rem; }
+    .result-card { background:#111; border:1px solid #2a2a2a; border-radius:10px; padding:1.2rem; }
+    .result-card.loading { opacity:.5; }
+    .result-header { display:flex; align-items:center; gap:.6rem; margin-bottom:.8rem; }
+    .result-name { font-weight:700; font-size:1rem; flex:1; }
+    .verdict-badge { font-size:.7rem; font-weight:700; padding:3px 8px; border-radius:4px; }
+    .verdict-mantida { background:#14532d; color:#4ade80; }
+    .verdict-alterada { background:#451a03; color:#fb923c; }
+    .verdict-invalidada { background:#450a0a; color:#f87171; }
+    .verdict-investir { background:#14532d; color:#4ade80; }
+    .verdict-monitorar { background:#1e1a3a; color:#7c6af7; }
+    .verdict-passar { background:#450a0a; color:#f87171; }
+    .verdict-manter { background:#1a2332; color:#60a5fa; }
+    .verdict-comprar { background:#14532d; color:#4ade80; }
+    .verdict-reduzir { background:#451a03; color:#fb923c; }
+    .verdict-vender { background:#450a0a; color:#f87171; }
+    .result-brief { font-size:.82rem; line-height:1.6; color:#bbb; }
+    .result-brief p { margin:.4rem 0; }
+    .btn-open { margin-top:.8rem; background:none; border:1px solid #333; color:#888; border-radius:6px; padding:.35rem .8rem; font-size:.78rem; cursor:pointer; width:100%; }
+    .btn-open:hover { border-color:#7c6af7; color:#7c6af7; }
+
+    /* Evolution tab */
+    .evo-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-bottom:1.5rem; }
+    .evo-stat { background:#111; border:1px solid #2a2a2a; border-radius:8px; padding:1rem; text-align:center; }
+    .evo-stat-value { font-size:1.6rem; font-weight:700; color:#7c6af7; }
+    .evo-stat-label { font-size:.75rem; color:#888; margin-top:.2rem; }
+
+    .evo-empty { color:#444; text-align:center; padding:3rem; font-size:.9rem; }
+
+    .improvement-item { display:flex; gap:1rem; padding:1rem 0; border-bottom:1px solid #1a1a1a; }
+    .improvement-item:last-child { border-bottom:none; }
+    .improvement-dot { width:10px; height:10px; background:#7c6af7; border-radius:50%; margin-top:5px; flex-shrink:0; }
+    .improvement-content { flex:1; }
+    .improvement-label { font-weight:700; font-size:.9rem; color:#eee; }
+    .improvement-desc { font-size:.82rem; color:#aaa; margin-top:.2rem; line-height:1.5; }
+    .improvement-meta { display:flex; gap:.75rem; margin-top:.4rem; align-items:center; }
+    .improvement-date { font-size:.72rem; color:#555; }
+    .improvement-delta { font-size:.75rem; font-weight:700; }
+  </style>
+</head>
+<body>
+
+<div class="pf-header">
+  <a href="/" class="pf-back">← Copilot</a>
+  <div class="pf-title">C<span style="color:#7c6af7">ORTIQ</span> Portfólio</div>
+</div>
+
+<div class="pf-tabs">
+  <button class="pf-tab active" data-tab="portfolio">Meu Portfólio</button>
+  <button class="pf-tab" data-tab="evolution">Evolução do Research</button>
+</div>
+
+<div class="pf-content">
+
+  <!-- TAB: Portfólio -->
+  <div class="pf-section active" id="tab-portfolio">
+
+    <div class="add-form">
+      <div class="field">
+        <label>Tipo</label>
+        <select id="add-type">
+          <option value="equity">Equity (ticker)</option>
+          <option value="startup">Startup</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Nome / Ticker</label>
+        <input type="text" id="add-name" placeholder="VALE3 ou Stripe" />
+      </div>
+      <div class="field" id="url-field" style="display:none">
+        <label>Site (opcional)</label>
+        <input type="text" id="add-url" placeholder="stripe.com" />
+      </div>
+      <button class="btn-add" id="btn-add">+ Adicionar</button>
+    </div>
+
+    <div class="companies-list" id="companies-list"></div>
+
+    <button class="btn-analyze" id="btn-analyze" disabled>▶ Analisar Portfólio</button>
+
+    <div class="results-grid" id="results-grid"></div>
+
+  </div>
+
+  <!-- TAB: Evolução -->
+  <div class="pf-section" id="tab-evolution">
+
+    <div class="evo-stats">
+      <div class="evo-stat">
+        <div class="evo-stat-value" id="evo-experiments">—</div>
+        <div class="evo-stat-label">Experimentos rodados</div>
+      </div>
+      <div class="evo-stat">
+        <div class="evo-stat-value" id="evo-improvements">—</div>
+        <div class="evo-stat-label">Melhorias aplicadas</div>
+      </div>
+      <div class="evo-stat">
+        <div class="evo-stat-value" id="evo-rate">—</div>
+        <div class="evo-stat-label">Taxa de melhoria</div>
+      </div>
+    </div>
+
+    <div id="evo-list"></div>
+
+  </div>
+
+</div>
+
+<script>
+// ── Tabs ──
+document.querySelectorAll('.pf-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.pf-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.pf-section').forEach(s => s.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    if (tab.dataset.tab === 'evolution') loadEvolution();
+  });
+});
+
+// ── Portfolio state ──
+let portfolio = { companies: [] };
+
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+async function loadPortfolio() {
+  const r = await fetch('/api/portfolio');
+  portfolio = await r.json();
+  renderList();
+}
+
+async function savePortfolio() {
+  await fetch('/api/portfolio', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(portfolio) });
+}
+
+function renderList() {
+  const el = document.getElementById('companies-list');
+  const btn = document.getElementById('btn-analyze');
+  if (!portfolio.companies.length) {
+    el.innerHTML = '<div style="color:#444;font-size:.85rem;padding:.5rem 0">Nenhuma empresa adicionada ainda.</div>';
+    btn.disabled = true;
+    return;
+  }
+  btn.disabled = false;
+  el.innerHTML = portfolio.companies.map(c => `
+    <div class="company-item" data-id="${c.id}">
+      <span class="company-badge ${c.type === 'equity' ? 'badge-equity' : 'badge-startup'}">${c.type === 'equity' ? 'EQUITY' : 'STARTUP'}</span>
+      <span class="company-name">${c.name}</span>
+      ${c.url ? `<span class="company-url">${c.url}</span>` : ''}
+      <button class="btn-remove" onclick="removeCompany('${c.id}')">✕</button>
+    </div>
+  `).join('');
+}
+
+document.getElementById('add-type').addEventListener('change', function() {
+  document.getElementById('url-field').style.display = this.value === 'startup' ? '' : 'none';
+});
+
+document.getElementById('btn-add').addEventListener('click', () => {
+  const type = document.getElementById('add-type').value;
+  const name = document.getElementById('add-name').value.trim().toUpperCase().replace(/ /g, type === 'equity' ? '' : ' ');
+  const url = document.getElementById('add-url').value.trim();
+  if (!name) return;
+  portfolio.companies.push({ id: genId(), type, name: type === 'equity' ? name : document.getElementById('add-name').value.trim(), url: url || '' });
+  document.getElementById('add-name').value = '';
+  document.getElementById('add-url').value = '';
+  renderList();
+  savePortfolio();
+});
+
+window.removeCompany = function(id) {
+  portfolio.companies = portfolio.companies.filter(c => c.id !== id);
+  renderList();
+  savePortfolio();
+};
+
+// ── Analyze ──
+document.getElementById('btn-analyze').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-analyze');
+  const grid = document.getElementById('results-grid');
+  btn.disabled = true;
+  btn.textContent = '⏳ Analisando...';
+  grid.innerHTML = '';
+
+  // Criar cards de loading
+  portfolio.companies.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'result-card loading';
+    card.id = 'card-' + c.id;
+    card.innerHTML = `<div class="result-header"><span class="result-name">${c.name}</span><span style="color:#444;font-size:.8rem">analisando...</span></div>`;
+    grid.appendChild(card);
+  });
+
+  const res = await fetch('/api/portfolio/analyze', { method: 'POST' });
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const parts = buf.split('\n\n');
+    buf = parts.pop();
+    for (const part of parts) {
+      const event_m = part.match(/^event: (.+)/m);
+      const data_m = part.match(/^data: (.+)/m);
+      if (!event_m || !data_m) continue;
+      const event = event_m[1].trim();
+      let data = {};
+      try { data = JSON.parse(data_m[1]); } catch {}
+
+      if (event === 'result') {
+        const card = document.getElementById('card-' + data.id);
+        if (!card) continue;
+        card.classList.remove('loading');
+
+        // parse verdict from brief
+        const verdictMatch = (data.brief || '').match(/\*\*([A-ZÇÃÕÊÉÁÍ\s]+)\*\*/);
+        const verdictRaw = verdictMatch ? verdictMatch[1].trim() : '';
+        const verdictClass = {
+          'TESE MANTIDA': 'verdict-mantida', 'TESE ALTERADA': 'verdict-alterada', 'TESE INVALIDADA': 'verdict-invalidada',
+          'INVESTIR': 'verdict-investir', 'MONITORAR': 'verdict-monitorar', 'PASSAR': 'verdict-passar',
+          'COMPRAR': 'verdict-comprar', 'MANTER': 'verdict-manter', 'REDUZIR': 'verdict-reduzir', 'VENDER': 'verdict-vender',
+        }[verdictRaw] || '';
+
+        const briefHtml = data.ok ? marked.parse(data.brief || '') : `<span style="color:#f87171">${data.brief}</span>`;
+        const company = portfolio.companies.find(c => c.id === data.id);
+        const openUrl = company ? (company.type === 'equity'
+          ? `/?ticker=${encodeURIComponent(company.name)}`
+          : `/?startup=${encodeURIComponent(company.name)}&url=${encodeURIComponent(company.url||'')}`)
+          : '/';
+
+        card.innerHTML = `
+          <div class="result-header">
+            <span class="result-name">${data.name}</span>
+            ${verdictRaw ? `<span class="verdict-badge ${verdictClass}">${verdictRaw}</span>` : ''}
+          </div>
+          <div class="result-brief">${briefHtml}</div>
+          <button class="btn-open" onclick="window.location='${openUrl}'">Ver análise completa →</button>
+        `;
+      }
+      if (event === 'done') {
+        btn.disabled = false;
+        btn.textContent = '▶ Analisar Portfólio';
+      }
+    }
+  }
+  btn.disabled = false;
+  btn.textContent = '▶ Analisar Portfólio';
+});
+
+// ── Evolution ──
+async function loadEvolution() {
+  const r = await fetch('/api/lab/evolution');
+  const d = await r.json();
+  document.getElementById('evo-experiments').textContent = d.total_experiments;
+  document.getElementById('evo-improvements').textContent = d.total_improvements;
+  const rate = d.total_experiments ? Math.round(d.total_improvements / d.total_experiments * 100) : 0;
+  document.getElementById('evo-rate').textContent = rate + '%';
+
+  const list = document.getElementById('evo-list');
+  if (!d.improvements.length) {
+    list.innerHTML = '<div class="evo-empty">Nenhuma melhoria registrada ainda.<br>O Lab rodará automaticamente e as melhorias aparecerão aqui.</div>';
+    return;
+  }
+  list.innerHTML = d.improvements.map(imp => {
+    const date = imp.timestamp ? imp.timestamp.replace('T', ' ').slice(0, 16) : '';
+    const delta = imp.delta != null ? (imp.delta >= 0 ? '+' : '') + Number(imp.delta).toFixed(3) : '';
+    const deltaColor = (imp.delta || 0) >= 0 ? '#4ade80' : '#f87171';
+    return `<div class="improvement-item">
+      <div class="improvement-dot"></div>
+      <div class="improvement-content">
+        <div class="improvement-label">${imp.label}</div>
+        <div class="improvement-desc">${imp.description}</div>
+        <div class="improvement-meta">
+          ${date ? `<span class="improvement-date">${date}</span>` : ''}
+          ${delta ? `<span class="improvement-delta" style="color:${deltaColor}">${delta} score</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Init ──
+loadPortfolio();
+</script>
+</body>
+</html>
