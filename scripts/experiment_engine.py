@@ -191,11 +191,6 @@ def run_experiment(
         "dry_run": dry_run,
     }
 
-    _emit("done", {
-        "exp_id": exp_id,
-        "promoted": promotion["promoted"],
-        "best_delta": best_candidate["comparison"].get("aggregate_delta", 0) if best_candidate else 0,
-    })
     _write_json(os.path.join(exp_path, "experiment.json"), log)
     _update_leaderboard({
         "experiment_id": exp_id,
@@ -203,6 +198,11 @@ def run_experiment(
         "comparison": {"aggregate_delta": best_candidate["comparison"].get("aggregate_delta", 0) if best_candidate else 0},
         "mutation": best_candidate["mutation"] if best_candidate else {},
         "timestamp": log["timestamp"],
+    })
+    _emit("done", {
+        "exp_id": exp_id,
+        "promoted": promotion["promoted"],
+        "best_delta": best_candidate["comparison"].get("aggregate_delta", 0) if best_candidate else 0,
     })
     return log
 

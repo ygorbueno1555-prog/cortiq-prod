@@ -1,6 +1,7 @@
 """main.py — Cortiq Decision Copilot v2
 FastAPI server with SSE streaming, daily briefing scheduler, and draft review API.
 """
+import json
 import os
 import threading
 from contextlib import asynccontextmanager
