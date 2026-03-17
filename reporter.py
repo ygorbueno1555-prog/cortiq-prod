@@ -6,145 +6,143 @@ from typing import AsyncGenerator, List, Dict, Optional
 from anthropic import AsyncAnthropic
 
 EQUITY_PROMPT = """\
-Você é um analista fundamentalista sênior com 20 anos de experiência no mercado brasileiro.
+Você é o analista-chefe de uma boutique de research independente tier-1. Você passou 25 anos \
+em sell-side de alto nível (Goldman, Morgan Stanley, Itaú BBA) e agora presta serviço para \
+gestores de portfólio exigentes. Você não lista fatos — você transforma dados em decisão.
 
-Com base nas pesquisas abaixo sobre {ticker}, avalie se a tese de investimento continua válida \
-e gere um relatório de decisão estruturado.
+Seu trabalho agora: preparar um briefing de decisão sobre {ticker} para o gestor.
 
-TESE ATUAL: {thesis}
-MANDATO DA CARTEIRA: {mandate}
+CONTEXTO DO GESTOR:
+- Tese atual: {thesis}
+- Mandato: {mandate}
 {prev_context}
 {market_data_section}
-PESQUISAS (cite fontes pelo número [N] ao lado de cada afirmação):
+PESQUISAS DISPONÍVEIS (cite [N] em cada afirmação):
 {research}
 
 ---
-REGRAS:
-- Use APENAS informações presentes nas pesquisas acima
-- Cite fontes com [N] em cada afirmação relevante
-- Separe fatos confirmados de inferências (use "estimado" ou "provável" para inferências)
-- Se não há dados suficientes para um ponto, diga "dados insuficientes"
+PRINCÍPIOS:
+- Cada seção deve responder "por que isso importa para o gestor", não só "o que aconteceu"
+- Use linguagem direta e opiniosa — o gestor quer sua leitura, não uma lista de notícias
+- Cite [N] em toda afirmação com dado concreto
+- Inferências: use "estimo" ou "provável" — nunca afirme sem evidência
+- Se falta dado crítico, diga qual e por que faz falta
 
-Gere o relatório EXATAMENTE neste formato (use ## para seções, **negrito** para destaques):
+Gere o relatório EXATAMENTE neste formato:
 
 ## VEREDITO
 **[TESE MANTIDA | TESE ALTERADA | TESE INVALIDADA]**
 Confiança: [ALTA | MÉDIA | BAIXA]
-Racional da confiança: [1 frase — baseada na qualidade, quantidade e recência das evidências encontradas]
-Racional: [1 frase direta e objetiva sobre a tese]
+[1 frase explicando a confiança em termos de qualidade das evidências encontradas]
+[1-2 frases de racional — opiniosas, conectando o momento do ativo com a tese do gestor]
 
 ## AÇÃO RECOMENDADA
 **[COMPRAR | MANTER | REDUZIR | VENDER]**
-[1-2 frases com dados concretos e citações [N]]
+[2-3 frases explicando o porquê com dados [N]. Seja direto: "a assimetria risco/retorno atual sugere X porque Y"]
 
-{what_changed_section}
+{dynamic_section}
 
-## O QUE MUDOU
-- [fato relevante 1 com dado e citação [N]]
-- [fato relevante 2 com dado e citação [N]]
-- [fato relevante 3 com dado e citação [N]]
+## O QUE VOCÊ PRECISA MONITORAR
+[Não é lista de fatos — é o que o gestor deve ter no radar. Para cada item, explique o gatilho e o que ele muda na decisão]
+- **[tema 1]**: [o que está acontecendo] → [o que muda na tese se evoluir para X]
+- **[tema 2]**: [o que está acontecendo] → [o que muda na tese se evoluir para X]
+- **[tema 3]**: [o que está acontecendo] → [o que muda na tese se evoluir para X]
 
-## CATALISADORES (próximos 30-90 dias)
-- [catalisador 1 com citação [N] se disponível]
-- [catalisador 2]
+## CATALISADORES (30–90 dias)
+- **[evento]**: [data estimada se disponível] — [impacto esperado no papel e por quê [N]]
+- **[evento]**: [por que é relevante agora especificamente]
 
-## RISCOS E GATILHOS DE INVALIDAÇÃO
-- **[risco 1]**: [descrição + o que tornaria a tese inválida]
-- **[risco 2]**: [descrição + o que tornaria a tese inválida]
+## RISCOS QUE INVALIDAM A TESE
+- **[risco]**: [o que está em jogo] — gatilho de invalidação: [fato concreto que mudaria o veredito]
+- **[risco]**: [o que está em jogo] — gatilho de invalidação: [fato concreto que mudaria o veredito]
 
-## IMPACTO NO PORTFÓLIO
-[Análise do impacto considerando o mandato informado. Se mandato não informado, análise geral de risco/retorno.]
+## LEITURA DE PORTFÓLIO
+[Conecte o ativo ao mandato do gestor. Se mandato não informado, escreva a análise considerando um portfólio fundamentalista de longo prazo com foco em risco/retorno. Dê uma posição concreta: tamanho sugerido, momento de entrada, ponto de stop conceitual]
 
 ## TRILHA DE EVIDÊNCIAS
-- **[N]** [título da fonte] — [afirmação principal suportada] — [URL completa]
-- **[N]** [título da fonte] — [afirmação principal suportada] — [URL completa]
-- **[N]** [título da fonte] — [afirmação principal suportada] — [URL completa]
+- **[N]** [título] — [afirmação suportada] — [URL]
 
 ## EXPLORAR TAMBÉM
-Sugira 3 ativos/empresas que o analista pode querer comparar ou pesquisar em seguida:
-- **[ticker ou empresa 1]** — [por que é relevante comparar]
-- **[ticker ou empresa 2]** — [por que é relevante comparar]
-- **[ticker ou empresa 3]** — [por que é relevante comparar]
-
-Seja direto e use dados das pesquisas. Se não há dados suficientes para algum ponto, diga explicitamente.
+- **[ticker 1]** — [por que comparar agora]
+- **[ticker 2]** — [por que comparar agora]
+- **[ticker 3]** — [por que comparar agora]
 """
 
 STARTUP_PROMPT = """\
-Você é um analista de venture capital sênior com experiência em early-stage no Brasil e globalmente.
+Você é sócio de um fundo tier-1 de venture capital. Você já avaliou mais de 500 startups e \
+participou de rodadas de Series A ao IPO. Seu trabalho agora: preparar um VC memo de decisão \
+sobre {name} para o comitê de investimento.
 
-Com base nas pesquisas abaixo sobre {name}, gere um VC memo de due diligence completo.
+Você não escreve relatórios neutros — você dá uma posição clara e defende com evidências.
 
 TESE DE INVESTIMENTO: {thesis}
 SITE: {url}
 {prev_context}
-PESQUISAS (cite fontes pelo número [N] ao lado de cada afirmação):
+PESQUISAS (cite [N] em cada afirmação):
 {research}
 
 ---
-REGRAS:
-- Use APENAS informações presentes nas pesquisas acima
-- Cite fontes com [N] em cada afirmação relevante
-- Separe fatos confirmados de inferências (use "estimado" ou "provável" para inferências)
-- Se não há dados suficientes, indique claramente "dados insuficientes"
+PRINCÍPIOS:
+- Cada seção deve responder "por que isso importa para a decisão de investimento"
+- Seja opinionado: o comitê quer sua leitura, não um resumo da internet
+- Cite [N] em dados concretos. Inferências: "estimo" ou "provável"
+- Se falta dado crítico, aponte qual e o que ele mudaria na decisão
 
-Gere o VC memo EXATAMENTE neste formato (use ## para seções, **negrito** para destaques):
+Gere o VC memo EXATAMENTE neste formato:
 
 ## VEREDITO
 **[INVESTIR | MONITORAR | PASSAR]**
 Confiança: [ALTA | MÉDIA | BAIXA]
-Racional da confiança: [1 frase — baseada na qualidade, quantidade e recência das evidências encontradas]
-Racional: [1 frase direta e objetiva]
+[1 frase sobre a qualidade das evidências disponíveis]
+[1-2 frases de racional — diretas, com sua posição sobre o negócio]
 
-## RESUMO EXECUTIVO
-[2-3 frases: o que fazem, para quem, por que importa agora, qual o diferencial]
+## O QUE É E POR QUE IMPORTA AGORA
+[3-4 frases: o que fazem, para quem, qual o diferencial real vs. o pitch, por que o timing é (ou não é) favorável agora]
 
-{what_changed_section}
+{dynamic_section}
 
-## TIME
-- **Força**: [pontos fortes dos founders com citações [N]]
-- **Gap**: [o que falta no time]
+## TIME — MINHA LEITURA
+- **O que me convence**: [dados concretos [N] sobre os founders — track record, execução, coerência]
+- **O que me preocupa**: [lacunas reais, não genéricas — o que falta para esse momento específico]
 
-## MERCADO
-- **TAM estimado**: [valor com citação [N] ou "dados insuficientes"]
-- **Crescimento**: [taxa anual ou tendência identificada com citação [N]]
-- **Timing**: [Cedo demais | No tempo certo | Tarde — com justificativa]
+## MERCADO — REALIDADE VS. PITCH
+- **Tamanho real endereçável**: [não o TAM total — o mercado que eles conseguem capturar agora [N]]
+- **Crescimento**: [taxa com citação [N] ou "sem dados primários — estimo X com base em Y"]
+- **Timing**: [Por que agora? O que mudou no mercado que abre essa janela?]
 
-## TRAÇÃO
-- [métrica ou sinal de tração 1 com citação [N]]
-- [métrica ou sinal de tração 2]
+## TRAÇÃO — O QUE PROVAM OS NÚMEROS
+[Separe evidência real de marketing. Para cada métrica: o que ela prova, o que ela não prova]
+- [métrica/sinal 1 [N] → o que isso significa de verdade]
+- [métrica/sinal 2 → o que está faltando ver]
 
-## CONCORRENTES
-- **[concorrente 1]**: [como se diferenciam desta startup]
-- **[concorrente 2]**: [como se diferenciam desta startup]
+## COMPETIÇÃO — ONDE ELES GANHAM E PERDEM
+- **[concorrente principal]**: [vantagem real desta startup vs. esse player]
+- **[ameaça]**: [quem pode matar esse negócio em 18 meses e como]
 
-## RED FLAGS
-- [red flag 1 com citação [N] se disponível]
-- [red flag 2]
+## RED FLAGS — O QUE ME INCOMODA
+- **[flag 1]**: [o que vi/não vi nas pesquisas que levanta dúvida]
+- **[flag 2]**: [padrão de risco que reconheço de deals anteriores]
 
-## TESE DE INVESTIMENTO
-**Por que INVESTIR**: [argumento principal de upside]
-**Por que PASSAR**: [contra-argumento principal de risco]
+## A APOSTA
+**Bull case**: [se tudo der certo, o que acontece e qual o retorno potencial]
+**Bear case**: [o cenário realista de falha e por quê]
+**O que preciso ver para mudar de posição**: [métrica ou evento concreto]
 
 ## GATILHOS DE INVALIDAÇÃO
-- [evento que mudaria o veredito para PASSAR]
-- [métrica que, se não atingida, invalida a tese]
+- [fato específico que mudaria INVESTIR → PASSAR imediatamente]
+- [milestone que, se não atingido em X meses, confirma o bear case]
+
+## PRÓXIMAS PERGUNTAS PARA OS FOUNDERS
+- [pergunta 1 — a mais importante, que você não conseguiu responder pelas pesquisas]
+- [pergunta 2]
 
 ## TRILHA DE EVIDÊNCIAS
-- **[N]** [título da fonte] — [afirmação principal suportada] — [URL completa]
-- **[N]** [título da fonte] — [afirmação principal suportada] — [URL completa]
-- **[N]** [título da fonte] — [afirmação principal suportada] — [URL completa]
+- **[N]** [título] — [afirmação suportada] — [URL]
 
-## PRÓXIMOS PASSOS
-- [due diligence adicional recomendada]
-- [pergunta prioritária para os founders]
-
-## EXPLORAR TAMBÉM
-Sugira 3 startups similares que o analista pode querer pesquisar para comparação:
-- **[startup 1]** — [por que é relevante comparar ou o que têm em comum]
-- **[startup 2]** — [por que é relevante comparar ou o que têm em comum]
-- **[startup 3]** — [por que é relevante comparar ou o que têm em comum]
-
-Seja direto. Use dados das pesquisas. Se não há dados suficientes, indique claramente.
+## COMPARAR COM
+- **[startup 1]** — [por que a comparação é relevante agora]
+- **[startup 2]** — [por que a comparação é relevante agora]
+- **[startup 3]** — [por que a comparação é relevante agora]
 """
 
 
@@ -196,10 +194,15 @@ async def stream_equity_report(
 
     # Build comparison context if we have previous analysis
     prev_context = ""
-    what_changed_section = ""
+    dynamic_section = ""
     if prev_verdict and prev_date:
-        prev_context = f"\nANÁLISE ANTERIOR ({prev_date}): O veredito foi **{prev_verdict}**.\n"
-        what_changed_section = f"## O QUE MUDOU DESDE {prev_date}\n[Compare com o veredito anterior ({prev_verdict}) e destaque o que mudou: novos riscos, novos catalisadores, mudança de recomendação, fatos relevantes novos]"
+        prev_context = f"\nANÁLISE ANTERIOR ({prev_date}): veredito **{prev_verdict}**. Use isso para identificar o que mudou.\n"
+        dynamic_section = (
+            f"## O QUE MUDOU DESDE {prev_date}\n"
+            f"[Compare diretamente com o veredito anterior ({prev_verdict}). "
+            f"Destaque apenas o que é novo ou diferente: fatos, riscos, catalisadores, mudança de momentum. "
+            f"Não repita o que continua igual — foque no delta.]"
+        )
 
     market_data_section = ""
     if market_data:
@@ -209,18 +212,18 @@ async def stream_equity_report(
 
     prompt = EQUITY_PROMPT.format(
         ticker=ticker,
-        thesis=thesis or "Sem tese específica — gere análise geral do ativo",
-        mandate=mandate or "Sem mandato específico — análise geral",
+        thesis=thesis or "análise fundamentalista geral",
+        mandate=mandate or "portfólio fundamentalista de longo prazo",
         research=_format_research(results),
         prev_context=prev_context,
-        what_changed_section=what_changed_section,
+        dynamic_section=dynamic_section,
         market_data_section=market_data_section,
     )
 
     try:
         async with client.messages.stream(
             model=_get_model(),
-            max_tokens=2500,
+            max_tokens=4000,
             temperature=0.3,
             messages=[{"role": "user", "content": prompt}],
         ) as stream:
@@ -245,24 +248,28 @@ async def stream_startup_report(
         return
 
     prev_context = ""
-    what_changed_section = ""
+    dynamic_section = ""
     if prev_verdict and prev_date:
-        prev_context = f"\nANÁLISE ANTERIOR ({prev_date}): O veredito foi **{prev_verdict}**.\n"
-        what_changed_section = f"## O QUE MUDOU DESDE {prev_date}\n[Compare com o veredito anterior ({prev_verdict}) e destaque mudanças: tração, time, mercado, funding, riscos novos]"
+        prev_context = f"\nANÁLISE ANTERIOR ({prev_date}): veredito **{prev_verdict}**. Use para identificar o delta.\n"
+        dynamic_section = (
+            f"## O QUE MUDOU DESDE {prev_date}\n"
+            f"[Foque no delta vs. veredito anterior ({prev_verdict}): tração nova, mudança de time, "
+            f"funding, pivô, novos concorrentes, momentum. Ignore o que não mudou.]"
+        )
 
     prompt = STARTUP_PROMPT.format(
         name=name,
         url=url or "não informado",
-        thesis=thesis or "Sem tese específica — gere análise geral da startup",
+        thesis=thesis or "avaliar potencial de investimento",
         research=_format_research(results),
         prev_context=prev_context,
-        what_changed_section=what_changed_section,
+        dynamic_section=dynamic_section,
     )
 
     try:
         async with client.messages.stream(
             model=_get_model(),
-            max_tokens=2500,
+            max_tokens=4000,
             temperature=0.3,
             messages=[{"role": "user", "content": prompt}],
         ) as stream:
