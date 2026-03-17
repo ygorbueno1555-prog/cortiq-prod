@@ -226,7 +226,7 @@ async def run_equity_analysis(
             yield "evaluation", json.dumps(evaluation, ensure_ascii=False)
 
     sources = [
-        {"title": r["title"], "url": r["url"], "source_type": r.get("source_type", "web")}
+        {"title": r["title"], "url": r["url"], "source_type": r.get("source_type", "web"), "content": r.get("content", "")}
         for r in all_results[:20] if r.get("url")
     ]
     yield "sources", json.dumps(sources, ensure_ascii=False)
@@ -330,7 +330,7 @@ async def run_startup_analysis(
             yield "evaluation", json.dumps(evaluation, ensure_ascii=False)
 
     sources = [
-        {"title": r["title"], "url": r["url"], "source_type": r.get("source_type", "web")}
+        {"title": r["title"], "url": r["url"], "source_type": r.get("source_type", "web"), "content": r.get("content", "")}
         for r in all_results[:20] if r.get("url")
     ]
     yield "sources", json.dumps(sources, ensure_ascii=False)
