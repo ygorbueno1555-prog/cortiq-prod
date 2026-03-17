@@ -62,6 +62,8 @@ FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 STATIC_DIR = os.path.join(FRONTEND_DIR, "static")
 
 PORTFOLIO_PATH = os.path.join(BASE_DIR, "data", "portfolio.json")
+HISTORY_PATH   = os.path.join(BASE_DIR, "data", "analysis_history.json")
+MAX_HISTORY    = 100
 
 def _load_portfolio():
     os.makedirs(os.path.dirname(PORTFOLIO_PATH), exist_ok=True)
@@ -74,6 +76,24 @@ def _save_portfolio(data: dict):
     os.makedirs(os.path.dirname(PORTFOLIO_PATH), exist_ok=True)
     with open(PORTFOLIO_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+def _load_history() -> list:
+    os.makedirs(os.path.dirname(HISTORY_PATH), exist_ok=True)
+    if not os.path.exists(HISTORY_PATH):
+        return []
+    with open(HISTORY_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+def _save_history_entry(entry: dict):
+    from datetime import datetime, timezone
+    history = _load_history()
+    # deduplicate: replace existing entry for same name+type
+    history = [h for h in history if not (h.get("name") == entry["name"] and h.get("type") == entry["type"])]
+    entry["date"] = datetime.now(timezone.utc).isoformat()
+    history.insert(0, entry)
+    history = history[:MAX_HISTORY]
+    with open(HISTORY_PATH, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -374,6 +394,11 @@ async def save_portfolio(request: Request):
     return {"ok": True}
 
 
+@app.get("/api/portfolio/history")
+def get_portfolio_history():
+    return _load_history()
+
+
 @app.post("/api/portfolio/analyze")
 async def analyze_portfolio_companies():
     import sys as _sys
@@ -400,7 +425,9 @@ async def analyze_portfolio_companies():
                 results = await _run_queries_parallel(queries)
                 results = deduplicate_results(results)
                 brief = await generate_brief_entry(results, item["name"], item["type"])
-                return {"id": item.get("id",""), "name": item["name"], "type": item["type"], "brief": brief, "ok": True}
+                result = {"id": item.get("id",""), "name": item["name"], "type": item["type"], "brief": brief, "ok": True}
+                _save_history_entry({"name": item["name"], "type": item["type"], "brief": brief, "thesis": item.get("thesis",""), "url": item.get("url","")})
+                return result
             except Exception as e:
                 return {"id": item.get("id",""), "name": item["name"], "type": item["type"], "brief": f"Erro: {e}", "ok": False}
 

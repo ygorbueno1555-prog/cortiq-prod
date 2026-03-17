@@ -91,6 +91,7 @@
 
 <div class="pf-tabs">
   <button class="pf-tab active" data-tab="portfolio">Meu Portfólio</button>
+  <button class="pf-tab" data-tab="history">Histórico</button>
   <button class="pf-tab" data-tab="evolution">Evolução do Research</button>
 </div>
 
@@ -126,6 +127,11 @@
 
   </div>
 
+  <!-- TAB: Histórico -->
+  <div class="pf-section" id="tab-history">
+    <div id="hist-list"></div>
+  </div>
+
   <!-- TAB: Evolução -->
   <div class="pf-section" id="tab-evolution">
 
@@ -159,6 +165,7 @@ document.querySelectorAll('.pf-tab').forEach(tab => {
     tab.classList.add('active');
     document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
     if (tab.dataset.tab === 'evolution') loadEvolution();
+    if (tab.dataset.tab === 'history') loadHistory();
   });
 });
 
@@ -293,6 +300,40 @@ document.getElementById('btn-analyze').addEventListener('click', async () => {
   btn.disabled = false;
   btn.textContent = '▶ Analisar Portfólio';
 });
+
+// ── History ──
+async function loadHistory() {
+  const r = await fetch('/api/portfolio/history');
+  const entries = await r.json();
+  const list = document.getElementById('hist-list');
+  if (!entries.length) {
+    list.innerHTML = '<div style="color:#444;text-align:center;padding:3rem;font-size:.9rem">Nenhuma análise no histórico ainda.<br>Analise seu portfólio para ver os resultados aqui.</div>';
+    return;
+  }
+  list.innerHTML = entries.map(e => {
+    const verdictMatch = (e.brief || '').match(/\*\*([A-ZÇÃÕÊÉÁÍ\s]+)\*\*/);
+    const verdictRaw = verdictMatch ? verdictMatch[1].trim() : '';
+    const verdictClass = {
+      'TESE MANTIDA': 'verdict-mantida', 'TESE ALTERADA': 'verdict-alterada', 'TESE INVALIDADA': 'verdict-invalidada',
+      'INVESTIR': 'verdict-investir', 'MONITORAR': 'verdict-monitorar', 'PASSAR': 'verdict-passar',
+      'COMPRAR': 'verdict-comprar', 'MANTER': 'verdict-manter', 'REDUZIR': 'verdict-reduzir', 'VENDER': 'verdict-vender',
+    }[verdictRaw] || '';
+    const dateStr = e.date ? new Date(e.date).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+    const openUrl = e.type === 'equity'
+      ? `/?ticker=${encodeURIComponent(e.name)}`
+      : `/?startup=${encodeURIComponent(e.name)}&url=${encodeURIComponent(e.url||'')}`;
+    return `<div class="result-card" style="margin-bottom:.75rem">
+      <div class="result-header">
+        <span class="company-badge ${e.type === 'equity' ? 'badge-equity' : 'badge-startup'}">${e.type === 'equity' ? 'EQUITY' : 'STARTUP'}</span>
+        <span class="result-name">${e.name}</span>
+        ${verdictRaw ? `<span class="verdict-badge ${verdictClass}">${verdictRaw}</span>` : ''}
+        ${dateStr ? `<span style="font-size:.72rem;color:#555;margin-left:auto">${dateStr}</span>` : ''}
+      </div>
+      <div class="result-brief">${marked.parse(e.brief || '')}</div>
+      <button class="btn-open" onclick="window.location='${openUrl}'">Ver análise completa →</button>
+    </div>`;
+  }).join('');
+}
 
 // ── Evolution ──
 async function loadEvolution() {
