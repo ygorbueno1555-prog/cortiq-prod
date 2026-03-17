@@ -376,9 +376,10 @@ async def save_portfolio(request: Request):
 
 @app.post("/api/portfolio/analyze")
 async def analyze_portfolio_companies():
-    import sys as _sys, uuid as _uuid
+    import sys as _sys
     _sys.path.insert(0, BASE_DIR)
-    from agent import _collect_from_generator, run_equity_analysis, run_startup_analysis
+    from agent import build_equity_queries, build_startup_queries, _run_queries_parallel
+    from researcher import deduplicate_results
     from reporter import generate_brief_entry
 
     portfolio = _load_portfolio()
@@ -391,16 +392,14 @@ async def analyze_portfolio_companies():
 
         async def analyze_one(item):
             try:
+                thesis = item.get("thesis", "")
                 if item["type"] == "equity":
-                    data = await _collect_from_generator(
-                        run_equity_analysis(item["name"])
-                    )
+                    queries = build_equity_queries(item["name"], thesis)
                 else:
-                    data = await _collect_from_generator(
-                        run_startup_analysis(item["name"], item.get("url", ""))
-                    )
-                sources = data.get("sources", [])
-                brief = await generate_brief_entry(sources, item["name"], item["type"])
+                    queries = build_startup_queries(item["name"], item.get("url", ""), thesis)
+                results = await _run_queries_parallel(queries)
+                results = deduplicate_results(results)
+                brief = await generate_brief_entry(results, item["name"], item["type"])
                 return {"id": item.get("id",""), "name": item["name"], "type": item["type"], "brief": brief, "ok": True}
             except Exception as e:
                 return {"id": item.get("id",""), "name": item["name"], "type": item["type"], "brief": f"Erro: {e}", "ok": False}
