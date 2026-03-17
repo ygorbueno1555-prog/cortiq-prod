@@ -2,6 +2,7 @@
 FastAPI server with SSE streaming, daily briefing scheduler, and draft review API.
 """
 import os
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -60,6 +61,9 @@ STATIC_DIR = os.path.join(FRONTEND_DIR, "static")
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+# Lab state (loop contínuo)
+_lab_loop_state = {"running": False, "thread": None}
+
 
 # ── Pages ─────────────────────────────────────────────────
 @app.get("/")
@@ -71,6 +75,12 @@ def index():
 @app.get("/briefing")
 def briefing_page():
     with open(os.path.join(FRONTEND_DIR, "briefing.html"), encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
+
+@app.get("/lab")
+def lab_page():
+    with open(os.path.join(FRONTEND_DIR, "lab.html"), encoding="utf-8") as f:
         return HTMLResponse(f.read())
 
 
@@ -210,3 +220,120 @@ async def update_watchlist(request):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(body, f, ensure_ascii=False, indent=2)
     return {"ok": True}
+
+
+# ── Lab API ───────────────────────────────────────────────
+@app.get("/api/lab/experiments")
+def list_lab_experiments():
+    import glob as _glob
+    exp_dir = os.path.join(BASE_DIR, "experiments")
+    os.makedirs(exp_dir, exist_ok=True)
+    files = sorted(
+        _glob.glob(os.path.join(exp_dir, "exp-*", "experiment.json")),
+        reverse=True,
+    )[:50]
+    results = []
+    for f in files:
+        with open(f, encoding="utf-8") as fh:
+            try:
+                d = json.load(fh)
+                results.append({
+                    "experiment_id": d.get("experiment_id"),
+                    "timestamp": d.get("timestamp"),
+                    "dry_run": d.get("dry_run"),
+                    "promoted": d.get("promotion", {}).get("promoted"),
+                    "candidates": [
+                        {
+                            "id": c.get("candidate_id"),
+                            "mutation": c.get("mutation"),
+                            "decision": c.get("decision"),
+                            "rationale": c.get("rationale"),
+                            "aggregate_delta": c.get("comparison", {}).get("aggregate_delta"),
+                        }
+                        for c in d.get("candidates", [])
+                    ],
+                })
+            except Exception:
+                pass
+    return results
+
+
+@app.get("/api/lab/leaderboard")
+def get_lab_leaderboard():
+    path = os.path.join(BASE_DIR, "leaderboard", "index.json")
+    if not os.path.exists(path):
+        return {"experiments": [], "stats": {"total": 0, "promoted": 0, "keep_rate": 0}, "best": [], "worst": []}
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    exps = data.get("experiments", [])
+    total = len(exps)
+    promoted = sum(1 for e in exps if e.get("decision") == "PROMOTED")
+    keep_rate = round(promoted / total * 100, 1) if total else 0
+    best = sorted(exps, key=lambda e: e.get("aggregate_delta") or 0, reverse=True)[:5]
+    worst = sorted(exps, key=lambda e: e.get("aggregate_delta") or 0)[:5]
+    return {
+        "experiments": exps[-20:],
+        "stats": {"total": total, "promoted": promoted, "keep_rate": keep_rate},
+        "best": best,
+        "worst": worst,
+    }
+
+
+@app.post("/api/lab/run")
+async def run_lab_experiment(
+    candidates: int = 3,
+    dry_run: bool = True,
+    mutation_type: str | None = None,
+):
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
+    from lab_runner import run_experiment_stream
+
+    async def gen():
+        try:
+            async for chunk in run_experiment_stream(
+                candidates=candidates,
+                dry_run=dry_run,
+                mutation_type=mutation_type,
+            ):
+                yield chunk
+        except Exception as e:
+            yield f"event: __error__\ndata: {json.dumps({'message': str(e)})}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
+
+
+@app.get("/api/lab/loop/status")
+def lab_loop_status():
+    return {"running": _lab_loop_state["running"]}
+
+
+@app.post("/api/lab/loop/start")
+def lab_loop_start(interval_hours: int = 6):
+    if _lab_loop_state["running"]:
+        return {"ok": False, "message": "Loop já está rodando."}
+
+    def _loop_worker():
+        import time
+        import sys as _sys
+        _sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
+        from experiment_engine import run_experiment
+        while _lab_loop_state["running"]:
+            try:
+                run_experiment(candidates=3, dry_run=False)
+            except Exception as e:
+                print(f"[lab loop] erro: {e}")
+            time.sleep(interval_hours * 3600)
+
+    _lab_loop_state["running"] = True
+    t = threading.Thread(target=_loop_worker, daemon=True)
+    _lab_loop_state["thread"] = t
+    t.start()
+    return {"ok": True, "message": f"Loop iniciado. Intervalo: {interval_hours}h."}
+
+
+@app.post("/api/lab/loop/stop")
+def lab_loop_stop():
+    _lab_loop_state["running"] = False
+    return {"ok": True, "message": "Loop parado."}
