@@ -689,4 +689,25 @@ function bindHistoryHints() {
     renderHistoryPanel();
     $('cache-hint').style.display = 'none';
   });
+
+  // Auto-trigger from URL params (coming from portfolio page)
+  const params = new URLSearchParams(window.location.search);
+  const tickerParam  = params.get('ticker');
+  const startupParam = params.get('startup');
+
+  if (tickerParam) {
+    $('ticker').value = tickerParam.toUpperCase();
+    setTimeout(() => $('btn-equity').click(), 100);
+  } else if (startupParam) {
+    // Switch to startup mode
+    document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector('[data-mode="startup"]').classList.add('active');
+    equityForm.style.display = 'none';
+    startupForm.style.display = 'block';
+    currentMode = 'startup';
+    $('startup-name').value = startupParam;
+    const urlParam = params.get('url');
+    if (urlParam) $('startup-url').value = urlParam;
+    setTimeout(() => $('btn-startup').click(), 100);
+  }
 })();
