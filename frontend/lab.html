@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cortiq Lab</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .lab-header { display:flex; align-items:center; gap:1rem; padding:1rem 1.5rem; border-bottom:1px solid var(--border,#2a2a2a); }
+    .lab-back { color:var(--accent,#7c6af7); text-decoration:none; font-size:.85rem; }
+    .lab-title { font-weight:700; font-size:1.1rem; letter-spacing:.05em; }
+    .lab-badge { background:#1e1a3a; color:#7c6af7; border:1px solid #7c6af7; border-radius:4px; padding:2px 8px; font-size:.7rem; font-weight:700; }
+
+    .stats-bar { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; padding:1rem 1.5rem; }
+    .stat-card { background:var(--card-bg,#111); border:1px solid var(--border,#2a2a2a); border-radius:8px; padding:1rem; text-align:center; }
+    .stat-value { font-size:1.8rem; font-weight:700; color:#7c6af7; }
+    .stat-label { font-size:.75rem; color:#888; margin-top:.2rem; }
+
+    .lab-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; padding:0 1.5rem 1.5rem; }
+    @media(max-width:768px){ .lab-grid{ grid-template-columns:1fr; } }
+
+    .lab-panel { background:var(--card-bg,#111); border:1px solid var(--border,#2a2a2a); border-radius:10px; padding:1.2rem; }
+    .lab-panel-title { font-size:.8rem; font-weight:700; letter-spacing:.08em; color:#888; text-transform:uppercase; margin-bottom:1rem; }
+
+    .run-controls { display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
+    .run-controls label { font-size:.8rem; color:#888; }
+    .run-controls select, .run-controls input[type=number] {
+      background:#1a1a1a; border:1px solid #333; color:#eee;
+      border-radius:6px; padding:.3rem .6rem; font-size:.85rem; width:80px;
+    }
+    .btn-run { background:#7c6af7; color:#fff; border:none; border-radius:8px; padding:.6rem 1.4rem; font-weight:700; cursor:pointer; font-size:.9rem; }
+    .btn-run:hover { background:#6a58e5; }
+    .btn-run:disabled { opacity:.4; cursor:not-allowed; }
+
+    .log-box {
+      background:#0a0a0a; border:1px solid #222; border-radius:6px;
+      padding:.75rem; min-height:140px; max-height:280px; overflow-y:auto;
+      font-family:monospace; font-size:.8rem; line-height:1.6;
+    }
+    .log-start { color:#7c6af7; }
+    .log-baseline { color:#aaa; }
+    .log-keep { color:#4ade80; }
+    .log-discard { color:#f87171; }
+    .log-done { color:#fbbf24; font-weight:700; }
+    .log-error { color:#f87171; }
+
+    .leaderboard-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+    .leaderboard-table th { color:#888; font-weight:600; text-align:left; padding:.4rem .6rem; border-bottom:1px solid #222; }
+    .leaderboard-table td { padding:.5rem .6rem; border-bottom:1px solid #1a1a1a; }
+    .badge-keep { background:#14532d; color:#4ade80; border-radius:4px; padding:2px 7px; font-size:.7rem; font-weight:700; }
+    .badge-discard { background:#450a0a; color:#f87171; border-radius:4px; padding:2px 7px; font-size:.7rem; font-weight:700; }
+    .badge-promoted { background:#1e1a3a; color:#7c6af7; border-radius:4px; padding:2px 7px; font-size:.7rem; font-weight:700; }
+
+    .loop-controls { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
+    .loop-status { font-size:.85rem; }
+    .loop-on { color:#4ade80; font-weight:700; }
+    .loop-off { color:#888; }
+    .btn-loop-start { background:#14532d; color:#4ade80; border:1px solid #4ade80; border-radius:8px; padding:.5rem 1.2rem; font-weight:700; cursor:pointer; font-size:.85rem; }
+    .btn-loop-stop { background:#450a0a; color:#f87171; border:1px solid #f87171; border-radius:8px; padding:.5rem 1.2rem; font-weight:700; cursor:pointer; font-size:.85rem; }
+    .interval-select { background:#1a1a1a; border:1px solid #333; color:#eee; border-radius:6px; padding:.3rem .6rem; font-size:.85rem; }
+
+    .exp-list { max-height:320px; overflow-y:auto; }
+    .exp-item { padding:.6rem .2rem; border-bottom:1px solid #1a1a1a; font-size:.82rem; }
+    .exp-item:last-child { border-bottom:none; }
+    .exp-id { color:#666; font-family:monospace; font-size:.75rem; }
+    .exp-ts { color:#555; font-size:.72rem; }
+  </style>
+</head>
+<body>
+
+<div class="lab-header">
+  <a href="/" class="lab-back">← Copilot</a>
+  <div class="lab-title">C<span style="color:#7c6af7">ORTIQ</span> LAB</div>
+  <div class="lab-badge">AUTORESEARCH</div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat-card">
+    <div class="stat-value" id="stat-total">—</div>
+    <div class="stat-label">Experimentos</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value" id="stat-promoted">—</div>
+    <div class="stat-label">Promovidos</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value" id="stat-keeprate">—</div>
+    <div class="stat-label">Taxa de KEEP</div>
+  </div>
+</div>
+
+<div class="lab-grid">
+
+  <div class="lab-panel">
+    <div class="lab-panel-title">Rodar Experimento</div>
+    <div class="run-controls">
+      <div>
+        <label>Candidatos</label><br/>
+        <input type="number" id="ctrl-candidates" value="3" min="1" max="7" />
+      </div>
+      <div>
+        <label>Modo</label><br/>
+        <select id="ctrl-dryrun">
+          <option value="true">Dry Run</option>
+          <option value="false">Real (usa API)</option>
+        </select>
+      </div>
+      <div>
+        <label>Mutação</label><br/>
+        <select id="ctrl-mutation">
+          <option value="">Aleatória</option>
+          <option value="increase_primary_weight">+ primary_weight</option>
+          <option value="tighten_retry">+ retry threshold</option>
+          <option value="loosen_retry">- retry threshold</option>
+          <option value="boost_weak_coverage_weight">+ weak coverage</option>
+          <option value="reduce_weak_coverage_weight">- weak coverage</option>
+          <option value="prioritize_traction_queries">priorizar traction</option>
+          <option value="decrease_coverage_weight">- coverage weight</option>
+        </select>
+      </div>
+      <button class="btn-run" id="btn-run">▶ EXECUTAR</button>
+    </div>
+    <div class="log-box" id="log-box">
+      <span style="color:#444">— aguardando execução —</span>
+    </div>
+  </div>
+
+  <div class="lab-panel">
+    <div class="lab-panel-title">Loop Contínuo</div>
+    <div class="loop-controls">
+      <div class="loop-status">
+        Status: <span id="loop-status-label" class="loop-off">Parado</span>
+      </div>
+      <select class="interval-select" id="loop-interval">
+        <option value="1">a cada 1h</option>
+        <option value="3">a cada 3h</option>
+        <option value="6" selected>a cada 6h</option>
+        <option value="12">a cada 12h</option>
+        <option value="24">a cada 24h</option>
+      </select>
+      <button class="btn-loop-start" id="btn-loop-start">▶ Iniciar Loop</button>
+      <button class="btn-loop-stop" id="btn-loop-stop" style="display:none">■ Parar Loop</button>
+    </div>
+    <div style="margin-top:1rem">
+      <div class="lab-panel-title" style="margin-bottom:.5rem">Melhores Mutações</div>
+      <table class="leaderboard-table">
+        <thead><tr><th>Mutação</th><th>Δ Score</th><th>Decisão</th></tr></thead>
+        <tbody id="best-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="lab-panel">
+    <div class="lab-panel-title">Leaderboard — Histórico</div>
+    <table class="leaderboard-table">
+      <thead><tr><th>Experimento</th><th>Mutação</th><th>Δ Score</th><th>Decisão</th></tr></thead>
+      <tbody id="leaderboard-tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="lab-panel">
+    <div class="lab-panel-title">Experimentos Recentes</div>
+    <div class="exp-list" id="exp-list">
+      <span style="color:#444; font-size:.82rem">— sem experimentos ainda —</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function fmt_delta(v) {
+  if (v == null) return '—';
+  const s = (v >= 0 ? '+' : '') + Number(v).toFixed(3);
+  return `<span style="color:${v >= 0 ? '#4ade80' : '#f87171'}">${s}</span>`;
+}
+function fmt_decision(d) {
+  if (d === 'PROMOTED') return '<span class="badge-promoted">PROMOTED</span>';
+  if (d === 'KEEP') return '<span class="badge-keep">KEEP</span>';
+  return '<span class="badge-discard">DISCARD</span>';
+}
+function mutation_label(m) {
+  if (!m || !m.type) return '—';
+  const ch = m.changes ? Object.entries(m.changes).map(([k,v]) => `${k}=${v}`).join(', ') : '';
+  return `<strong>${m.type}</strong>${ch ? ` <span style="color:#555">(${ch})</span>` : ''}`;
+}
+
+async function loadLeaderboard() {
+  const r = await fetch('/api/lab/leaderboard');
+  const d = await r.json();
+  document.getElementById('stat-total').textContent = d.stats.total;
+  document.getElementById('stat-promoted').textContent = d.stats.promoted;
+  document.getElementById('stat-keeprate').textContent = d.stats.keep_rate + '%';
+
+  const tbody = document.getElementById('leaderboard-tbody');
+  tbody.innerHTML = '';
+  (d.experiments || []).slice().reverse().forEach(e => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="exp-id">${(e.experiment_id||'').slice(-14)}</td><td>${mutation_label(e.mutation)}</td><td>${fmt_delta(e.aggregate_delta)}</td><td>${fmt_decision(e.decision)}</td>`;
+    tbody.appendChild(tr);
+  });
+  if (!d.experiments.length) tbody.innerHTML = '<tr><td colspan="4" style="color:#444;text-align:center">sem dados</td></tr>';
+
+  const best_tbody = document.getElementById('best-tbody');
+  best_tbody.innerHTML = '';
+  (d.best || []).forEach(e => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${mutation_label(e.mutation)}</td><td>${fmt_delta(e.aggregate_delta)}</td><td>${fmt_decision(e.decision)}</td>`;
+    best_tbody.appendChild(tr);
+  });
+}
+
+async function loadExperiments() {
+  const r = await fetch('/api/lab/experiments');
+  const exps = await r.json();
+  const el = document.getElementById('exp-list');
+  if (!exps.length) { el.innerHTML = '<span style="color:#444; font-size:.82rem">— sem experimentos ainda —</span>'; return; }
+  el.innerHTML = exps.map(e => {
+    const cands = (e.candidates || []).map(c =>
+      `<span class="${c.decision === 'KEEP' ? 'badge-keep' : 'badge-discard'}" style="font-size:.68rem;margin-right:.3rem">${c.decision}</span>`
+    ).join('');
+    return `<div class="exp-item"><div><span class="exp-id">${e.experiment_id}</span> ${e.promoted ? '<span class="badge-promoted">PROMOTED</span>' : ''}</div><div class="exp-ts">${(e.timestamp||'').replace('T',' ').slice(0,19)}</div><div style="margin-top:.3rem">${cands}</div></div>`;
+  }).join('');
+}
+
+document.getElementById('btn-run').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-run');
+  const log = document.getElementById('log-box');
+  const candidates = document.getElementById('ctrl-candidates').value;
+  const dry_run = document.getElementById('ctrl-dryrun').value;
+  const mutation = document.getElementById('ctrl-mutation').value;
+
+  btn.disabled = true;
+  log.innerHTML = '';
+
+  const params = new URLSearchParams({ candidates, dry_run });
+  if (mutation) params.set('mutation_type', mutation);
+
+  const res = await fetch(`/api/lab/run?${params}`, { method: 'POST' });
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+
+  function append(cls, text) {
+    log.innerHTML += `<div class="${cls}">${text}</div>`;
+    log.scrollTop = log.scrollHeight;
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const parts = buf.split('\n\n');
+    buf = parts.pop();
+    for (const part of parts) {
+      const event_match = part.match(/^event: (.+)/m);
+      const data_match = part.match(/^data: (.+)/m);
+      if (!event_match || !data_match) continue;
+      const event = event_match[1].trim();
+      let data = {};
+      try { data = JSON.parse(data_match[1]); } catch {}
+      if (event === 'start') append('log-start', `▶ Iniciando ${data.exp_id} — ${data.candidates} candidato(s) [${data.dry_run ? 'dry-run' : 'REAL'}]`);
+      else if (event === 'baseline_done') append('log-baseline', `  ✓ Baseline: ${(data.run||'').split('/').pop()}`);
+      else if (event === 'candidate_done') {
+        const cls = data.decision === 'KEEP' ? 'log-keep' : 'log-discard';
+        append(cls, `  ${data.decision === 'KEEP' ? '✓' : '✗'} Candidato ${data.idx} — ${data.decision} | Δ ${(data.aggregate_delta>=0?'+':'')}${(data.aggregate_delta||0).toFixed(3)} | ${data.mutation?.type||'?'}`);
+      } else if (event === '__done__') {
+        append('log-done', `✅ Pronto — Promovido: ${data.promoted ? 'SIM' : 'NÃO'} | Melhor Δ: ${(data.best_delta>=0?'+':'')}${(data.best_delta||0).toFixed(3)}`);
+      } else if (event === '__error__') {
+        append('log-error', `❌ Erro: ${data.message}`);
+      }
+    }
+  }
+
+  btn.disabled = false;
+  loadLeaderboard();
+  loadExperiments();
+});
+
+async function checkLoopStatus() {
+  const r = await fetch('/api/lab/loop/status');
+  const d = await r.json();
+  document.getElementById('loop-status-label').textContent = d.running ? 'Rodando' : 'Parado';
+  document.getElementById('loop-status-label').className = d.running ? 'loop-on' : 'loop-off';
+  document.getElementById('btn-loop-start').style.display = d.running ? 'none' : '';
+  document.getElementById('btn-loop-stop').style.display = d.running ? '' : 'none';
+}
+
+document.getElementById('btn-loop-start').addEventListener('click', async () => {
+  const interval = document.getElementById('loop-interval').value;
+  await fetch(`/api/lab/loop/start?interval_hours=${interval}`, { method: 'POST' });
+  checkLoopStatus();
+});
+document.getElementById('btn-loop-stop').addEventListener('click', async () => {
+  await fetch('/api/lab/loop/stop', { method: 'POST' });
+  checkLoopStatus();
+});
+
+loadLeaderboard();
+loadExperiments();
+checkLoopStatus();
+setInterval(() => { loadLeaderboard(); loadExperiments(); checkLoopStatus(); }, 15000);
+</script>
+</body>
+</html>
