@@ -7,7 +7,7 @@ import os
 import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -235,7 +235,7 @@ def get_watchlist():
 
 
 @app.put("/api/watchlist")
-async def update_watchlist(request):
+async def update_watchlist(request: Request):
     import json
     body = await request.json()
     path = os.path.join(BASE_DIR, "watchlist.json")
@@ -368,7 +368,7 @@ def get_portfolio():
 
 
 @app.post("/api/portfolio")
-async def save_portfolio(request):
+async def save_portfolio(request: Request):
     body = await request.json()
     _save_portfolio(body)
     return {"ok": True}
