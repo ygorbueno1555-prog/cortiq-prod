@@ -126,6 +126,12 @@ def portfolio_page():
         return HTMLResponse(f.read())
 
 
+@app.get("/monitor")
+def monitor_page():
+    with open(os.path.join(FRONTEND_DIR, "monitor.html"), encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "product": "Cortiq Decision Copilot v2"}
@@ -453,6 +459,80 @@ MUTATION_LABELS = {
     "prioritize_traction_queries": ("Startups: tração em primeiro lugar", "Para startups, buscamos métricas reais de tração antes de qualquer outro dado"),
     "decrease_coverage_weight": ("Evidência acima de cobertura", "Priorizamos qualidade das evidências sobre amplitude de cobertura"),
 }
+
+# ── Monitor API ────────────────────────────────────────────
+def _fetch_monitor_price(ticker: str) -> dict:
+    """Fetch current price and previous close for monitor."""
+    try:
+        import yfinance as yf
+        yf_ticker = ticker if "." in ticker else f"{ticker}.SA"
+        stock = yf.Ticker(yf_ticker)
+        info = stock.info
+
+        price = info.get("currentPrice") or info.get("regularMarketPrice")
+        prev_close = info.get("previousClose") or info.get("regularMarketPreviousClose")
+        day_high = info.get("dayHigh") or info.get("regularMarketDayHigh")
+        day_low  = info.get("dayLow")  or info.get("regularMarketDayLow")
+        volume   = info.get("volume")  or info.get("regularMarketVolume")
+
+        delta_pct = None
+        delta_val = None
+        if price is not None and prev_close and prev_close > 0:
+            delta_val = price - prev_close
+            delta_pct = (delta_val / prev_close) * 100
+
+        return {
+            "ticker": ticker,
+            "price": price,
+            "prev_close": prev_close,
+            "day_high": day_high,
+            "day_low": day_low,
+            "volume": volume,
+            "delta_pct": round(delta_pct, 4) if delta_pct is not None else None,
+            "delta_val": round(delta_val, 4) if delta_val is not None else None,
+            "name": info.get("longName") or info.get("shortName"),
+        }
+    except Exception as e:
+        return {"ticker": ticker, "error": str(e)}
+
+
+@app.get("/api/monitor/price")
+async def get_monitor_price(ticker: str):
+    loop = asyncio.get_event_loop()
+    data = await loop.run_in_executor(None, _fetch_monitor_price, ticker)
+    return data
+
+
+@app.post("/api/monitor/check-alerts")
+async def check_monitor_alerts(request: Request):
+    """Check all tickers in the monitor watchlist and return alerts for >3% moves."""
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    tickers = body.get("tickers", [])
+
+    # If no tickers provided, return empty
+    if not tickers:
+        return {"alerts": [], "checked": 0}
+
+    THRESHOLD = 3.0
+    loop = asyncio.get_event_loop()
+
+    async def check_one(ticker):
+        data = await loop.run_in_executor(None, _fetch_monitor_price, ticker)
+        if data.get("delta_pct") is not None and abs(data["delta_pct"]) >= THRESHOLD:
+            direction = "alta" if data["delta_pct"] > 0 else "queda"
+            return {
+                "ticker": ticker,
+                "message": f"Variação de {'+' if data['delta_pct'] > 0 else ''}{data['delta_pct']:.2f}% ({direction}) — fechamento ant.: R$ {data.get('prev_close') or '?'}",
+                "delta_pct": data["delta_pct"],
+                "data": data,
+            }
+        return None
+
+    tasks = [asyncio.create_task(check_one(t)) for t in tickers]
+    results = await asyncio.gather(*tasks)
+    alerts = [r for r in results if r is not None]
+    return {"alerts": alerts, "checked": len(tickers)}
+
 
 @app.get("/api/lab/evolution")
 def get_lab_evolution():

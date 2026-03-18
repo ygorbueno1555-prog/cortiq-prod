@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cortiq — Monitor de Carteira</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .mon-header { display:flex; align-items:center; gap:1rem; padding:1rem 1.5rem; border-bottom:1px solid var(--border,#2a2a2a); }
+    .mon-back { color:#7c6af7; text-decoration:none; font-size:.85rem; }
+    .mon-title { font-weight:700; font-size:1.1rem; letter-spacing:.05em; }
+    .mon-actions { margin-left:auto; display:flex; gap:.6rem; align-items:center; }
+
+    .mon-content { padding:1.5rem; max-width:1100px; margin:0 auto; }
+
+    /* Add ticker row */
+    .add-row { display:flex; gap:.6rem; align-items:flex-end; margin-bottom:1.5rem; padding:1rem; background:#111; border:1px solid #2a2a2a; border-radius:10px; }
+    .add-row input { background:#1a1a1a; border:1px solid #333; color:#eee; border-radius:6px; padding:.4rem .8rem; font-size:.9rem; width:160px; }
+    .add-row input::placeholder { color:#444; }
+    .btn-add-ticker { background:#7c6af7; color:#fff; border:none; border-radius:8px; padding:.45rem 1.1rem; font-weight:700; cursor:pointer; font-size:.85rem; }
+    .btn-add-ticker:hover { background:#6a58e5; }
+
+    /* Watchlist grid */
+    .watchlist-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:1rem; margin-bottom:2rem; }
+
+    .ticker-card { background:#111; border:1px solid #2a2a2a; border-radius:12px; padding:1.2rem; cursor:pointer; transition:border-color .15s; position:relative; }
+    .ticker-card:hover { border-color:#7c6af7; }
+    .ticker-card.selected { border-color:#7c6af7; background:#120f20; }
+    .ticker-card.alert { border-color:#f87171; }
+    .ticker-card.alert.selected { border-color:#f87171; background:#1a0f0f; }
+
+    .tc-top { display:flex; align-items:center; gap:.6rem; margin-bottom:.6rem; }
+    .tc-name { font-weight:700; font-size:1rem; flex:1; }
+    .tc-badge-alert { background:#450a0a; color:#f87171; font-size:.65rem; font-weight:700; padding:2px 6px; border-radius:4px; }
+    .tc-remove { background:none; border:none; color:#444; cursor:pointer; font-size:.9rem; padding:0; }
+    .tc-remove:hover { color:#f87171; }
+
+    .tc-price { font-size:1.4rem; font-weight:700; color:#eee; }
+    .tc-delta { font-size:.85rem; font-weight:600; margin-top:.2rem; }
+    .tc-delta.pos { color:#4ade80; }
+    .tc-delta.neg { color:#f87171; }
+    .tc-delta.neutral { color:#888; }
+    .tc-prev { font-size:.75rem; color:#555; margin-top:.2rem; }
+
+    .tc-loading { color:#555; font-size:.85rem; }
+    .tc-error { color:#f87171; font-size:.8rem; }
+
+    .btn-fetch { background:none; border:1px solid #333; color:#888; border-radius:6px; padding:.3rem .7rem; font-size:.75rem; cursor:pointer; margin-top:.6rem; width:100%; }
+    .btn-fetch:hover { border-color:#7c6af7; color:#7c6af7; }
+    .btn-fetch:disabled { opacity:.4; cursor:not-allowed; }
+
+    /* Delta detail panel */
+    .delta-panel { background:#111; border:1px solid #2a2a2a; border-radius:12px; padding:1.5rem; margin-bottom:2rem; }
+    .delta-panel h3 { font-size:.95rem; font-weight:700; color:#eee; margin:0 0 1rem; }
+    .delta-panel.hidden { display:none; }
+
+    .delta-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:1rem; }
+    .delta-item { background:#0d0d0d; border:1px solid #222; border-radius:8px; padding:.9rem; }
+    .delta-label { font-size:.72rem; color:#666; margin-bottom:.3rem; }
+    .delta-value { font-size:1.1rem; font-weight:700; color:#eee; }
+    .delta-value.pos { color:#4ade80; }
+    .delta-value.neg { color:#f87171; }
+    .delta-value.warn { color:#fb923c; }
+
+    /* Alerts section */
+    .alerts-section { margin-top:1.5rem; }
+    .alerts-section h3 { font-size:.9rem; font-weight:700; color:#888; margin-bottom:.8rem; text-transform:uppercase; letter-spacing:.05em; }
+    .alert-item { display:flex; align-items:center; gap:.8rem; padding:.7rem 1rem; background:#1a0f0f; border:1px solid #450a0a; border-radius:8px; margin-bottom:.5rem; }
+    .alert-icon { font-size:1rem; }
+    .alert-msg { font-size:.85rem; color:#f87171; flex:1; }
+    .alert-time { font-size:.72rem; color:#555; }
+    .no-alerts { color:#444; font-size:.85rem; padding:.5rem 0; }
+
+    /* Buttons */
+    .btn-check-alerts { background:#1a0f0f; border:1px solid #450a0a; color:#f87171; border-radius:8px; padding:.45rem 1rem; font-size:.82rem; font-weight:600; cursor:pointer; }
+    .btn-check-alerts:hover { background:#2a1515; }
+    .btn-fetch-all { background:#1e1a3a; border:1px solid #3a3060; color:#a78bf5; border-radius:8px; padding:.45rem 1rem; font-size:.82rem; font-weight:600; cursor:pointer; }
+    .btn-fetch-all:hover { background:#2a2450; }
+
+    .scheduler-badge { font-size:.72rem; color:#555; padding:.3rem .6rem; background:#111; border:1px solid #222; border-radius:6px; }
+  </style>
+</head>
+<body>
+
+<div class="mon-header">
+  <a href="/" class="mon-back">← Copilot</a>
+  <div class="mon-title">C<span style="color:#7c6af7">ORTIQ</span> Monitor</div>
+  <div class="mon-actions">
+    <span class="scheduler-badge" id="scheduler-badge">⏱ Auto 1h</span>
+    <button class="btn-fetch-all" id="btn-fetch-all">↻ Atualizar Todos</button>
+    <button class="btn-check-alerts" id="btn-check-alerts">🔔 Verificar Alertas</button>
+  </div>
+</div>
+
+<div class="mon-content">
+
+  <!-- Add ticker -->
+  <div class="add-row">
+    <input type="text" id="input-ticker" placeholder="PETR4, VALE3, ITUB4..." autocomplete="off" />
+    <button class="btn-add-ticker" id="btn-add">+ Adicionar</button>
+  </div>
+
+  <!-- Watchlist cards -->
+  <div class="watchlist-grid" id="watchlist-grid">
+    <div style="color:#444;font-size:.85rem;grid-column:1/-1">
+      Nenhum ativo monitorado. Adicione um ticker acima.
+    </div>
+  </div>
+
+  <!-- Delta detail panel -->
+  <div class="delta-panel hidden" id="delta-panel">
+    <h3 id="delta-title">— Detalhes</h3>
+    <div class="delta-grid" id="delta-grid"></div>
+  </div>
+
+  <!-- Alerts -->
+  <div class="alerts-section">
+    <h3>Alertas Recentes</h3>
+    <div id="alerts-list"><div class="no-alerts">Nenhum alerta disparado ainda.</div></div>
+  </div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────
+let watchlist = JSON.parse(localStorage.getItem('monitor_watchlist') || '[]');
+let priceCache = JSON.parse(localStorage.getItem('monitor_prices') || '{}');
+let alertLog   = JSON.parse(localStorage.getItem('monitor_alerts') || '[]');
+let selected   = null;
+const ALERT_THRESHOLD = 3.0; // %
+
+function saveState() {
+  localStorage.setItem('monitor_watchlist', JSON.stringify(watchlist));
+  localStorage.setItem('monitor_prices',   JSON.stringify(priceCache));
+  localStorage.setItem('monitor_alerts',   JSON.stringify(alertLog));
+}
+
+// ── Fetch price for one ticker ─────────────────────────────
+async function fetchPrice(ticker) {
+  try {
+    const res = await fetch(`/api/monitor/price?ticker=${encodeURIComponent(ticker)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch(e) {
+    return { error: e.message };
+  }
+}
+
+// ── Render watchlist ───────────────────────────────────────
+function renderGrid() {
+  const grid = document.getElementById('watchlist-grid');
+  if (watchlist.length === 0) {
+    grid.innerHTML = '<div style="color:#444;font-size:.85rem;grid-column:1/-1">Nenhum ativo monitorado. Adicione um ticker acima.</div>';
+    return;
+  }
+  grid.innerHTML = watchlist.map(ticker => {
+    const d = priceCache[ticker];
+    const isSelected = selected === ticker;
+    const isAlert = d && d.delta_pct != null && Math.abs(d.delta_pct) >= ALERT_THRESHOLD;
+    let deltaClass = 'neutral', deltaText = '—';
+    if (d && d.delta_pct != null) {
+      deltaClass = d.delta_pct > 0 ? 'pos' : d.delta_pct < 0 ? 'neg' : 'neutral';
+      deltaText  = (d.delta_pct > 0 ? '+' : '') + d.delta_pct.toFixed(2) + '%';
+    }
+    return `
+    <div class="ticker-card${isSelected?' selected':''}${isAlert?' alert':''}" onclick="selectTicker('${ticker}')">
+      <div class="tc-top">
+        <div class="tc-name">${ticker}</div>
+        ${isAlert ? '<span class="tc-badge-alert">⚠ ALERTA</span>' : ''}
+        <button class="tc-remove" onclick="removeTicker(event,'${ticker}')">✕</button>
+      </div>
+      ${d ? `
+        ${d.error ? `<div class="tc-error">${d.error}</div>` : `
+          <div class="tc-price">${d.price != null ? 'R$ '+d.price.toFixed(2) : '—'}</div>
+          <div class="tc-delta ${deltaClass}">${deltaText}</div>
+          <div class="tc-prev">Fechamento ant.: ${d.prev_close != null ? 'R$ '+d.prev_close.toFixed(2) : '—'}</div>
+        `}
+      ` : '<div class="tc-loading">Aguardando busca…</div>'}
+      <button class="btn-fetch" onclick="fetchOne(event,'${ticker}')" id="btn-f-${ticker}">Buscar agora</button>
+    </div>`;
+  }).join('');
+}
+
+// ── Render delta panel ─────────────────────────────────────
+function renderDeltaPanel(ticker) {
+  const panel = document.getElementById('delta-panel');
+  const d = priceCache[ticker];
+  if (!d || d.error) { panel.classList.add('hidden'); return; }
+  panel.classList.remove('hidden');
+  document.getElementById('delta-title').textContent = `${ticker} — Delta Box`;
+  const deltaPct = d.delta_pct;
+  const deltaClass = deltaPct == null ? '' : Math.abs(deltaPct) >= ALERT_THRESHOLD ? 'warn' : deltaPct >= 0 ? 'pos' : 'neg';
+  const deltaStr  = deltaPct != null ? (deltaPct > 0 ? '+' : '') + deltaPct.toFixed(2) + '%' : '—';
+  const deltaVal  = d.delta_val != null ? (d.delta_val > 0 ? '+' : '') + 'R$ ' + Math.abs(d.delta_val).toFixed(2) : '—';
+  document.getElementById('delta-grid').innerHTML = `
+    <div class="delta-item">
+      <div class="delta-label">Preço atual</div>
+      <div class="delta-value">${d.price != null ? 'R$ '+d.price.toFixed(2) : '—'}</div>
+    </div>
+    <div class="delta-item">
+      <div class="delta-label">Fechamento anterior</div>
+      <div class="delta-value">${d.prev_close != null ? 'R$ '+d.prev_close.toFixed(2) : '—'}</div>
+    </div>
+    <div class="delta-item">
+      <div class="delta-label">Variação (%)</div>
+      <div class="delta-value ${deltaClass}">${deltaStr}</div>
+    </div>
+    <div class="delta-item">
+      <div class="delta-label">Variação (R$)</div>
+      <div class="delta-value ${deltaClass}">${deltaVal}</div>
+    </div>
+    <div class="delta-item">
+      <div class="delta-label">Máx hoje</div>
+      <div class="delta-value">${d.day_high != null ? 'R$ '+d.day_high.toFixed(2) : '—'}</div>
+    </div>
+    <div class="delta-item">
+      <div class="delta-label">Mín hoje</div>
+      <div class="delta-value">${d.day_low != null ? 'R$ '+d.day_low.toFixed(2) : '—'}</div>
+    </div>
+    <div class="delta-item">
+      <div class="delta-label">Volume</div>
+      <div class="delta-value">${d.volume != null ? d.volume.toLocaleString('pt-BR') : '—'}</div>
+    </div>
+    <div class="delta-item">
+      <div class="delta-label">Atualizado às</div>
+      <div class="delta-value" style="font-size:.85rem">${d.fetched_at ? new Date(d.fetched_at).toLocaleTimeString('pt-BR') : '—'}</div>
+    </div>
+  `;
+}
+
+// ── Render alerts ──────────────────────────────────────────
+function renderAlerts() {
+  const el = document.getElementById('alerts-list');
+  if (alertLog.length === 0) {
+    el.innerHTML = '<div class="no-alerts">Nenhum alerta disparado ainda.</div>';
+    return;
+  }
+  el.innerHTML = alertLog.slice(0,20).map(a => `
+    <div class="alert-item">
+      <span class="alert-icon">⚠</span>
+      <span class="alert-msg">${a.ticker}: ${a.msg}</span>
+      <span class="alert-time">${new Date(a.ts).toLocaleTimeString('pt-BR')}</span>
+    </div>
+  `).join('');
+}
+
+// ── Actions ────────────────────────────────────────────────
+function selectTicker(ticker) {
+  selected = selected === ticker ? null : ticker;
+  renderGrid();
+  if (selected) renderDeltaPanel(selected);
+  else document.getElementById('delta-panel').classList.add('hidden');
+}
+
+function removeTicker(e, ticker) {
+  e.stopPropagation();
+  watchlist = watchlist.filter(t => t !== ticker);
+  delete priceCache[ticker];
+  if (selected === ticker) { selected = null; document.getElementById('delta-panel').classList.add('hidden'); }
+  saveState();
+  renderGrid();
+}
+
+async function fetchOne(e, ticker) {
+  e.stopPropagation();
+  const btn = document.getElementById(`btn-f-${ticker}`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Buscando…'; }
+  const data = await fetchPrice(ticker);
+  priceCache[ticker] = { ...data, fetched_at: new Date().toISOString() };
+  // check alert
+  if (data.delta_pct != null && Math.abs(data.delta_pct) >= ALERT_THRESHOLD) {
+    const msg = `Variação de ${data.delta_pct > 0 ? '+' : ''}${data.delta_pct.toFixed(2)}% (fechamento ant.: R$ ${data.prev_close?.toFixed(2)})`;
+    alertLog.unshift({ ticker, msg, ts: new Date().toISOString() });
+    alertLog = alertLog.slice(0, 100);
+  }
+  saveState();
+  renderGrid();
+  if (selected === ticker) renderDeltaPanel(ticker);
+  renderAlerts();
+}
+
+async function fetchAll() {
+  const btn = document.getElementById('btn-fetch-all');
+  btn.disabled = true; btn.textContent = '↻ Atualizando…';
+  await Promise.all(watchlist.map(t => fetchOne({ stopPropagation:()=>{} }, t)));
+  btn.disabled = false; btn.textContent = '↻ Atualizar Todos';
+}
+
+async function checkAlerts() {
+  const btn = document.getElementById('btn-check-alerts');
+  btn.disabled = true; btn.textContent = '🔔 Verificando…';
+  try {
+    const res = await fetch('/api/monitor/check-alerts', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ tickers: watchlist })
+    });
+    const data = await res.json();
+    if (data.alerts && data.alerts.length > 0) {
+      data.alerts.forEach(a => alertLog.unshift({ ticker: a.ticker, msg: a.message, ts: new Date().toISOString() }));
+      alertLog = alertLog.slice(0, 100);
+      saveState();
+      renderAlerts();
+      // refresh prices
+      data.alerts.forEach(a => {
+        if (a.data) priceCache[a.ticker] = { ...a.data, fetched_at: new Date().toISOString() };
+      });
+      renderGrid();
+    } else {
+      alertLog.unshift({ ticker: 'SISTEMA', msg: 'Nenhum alerta (variação < 3% em todos os ativos)', ts: new Date().toISOString() });
+      alertLog = alertLog.slice(0, 100);
+      saveState();
+      renderAlerts();
+    }
+  } catch(e) {
+    console.error(e);
+  }
+  btn.disabled = false; btn.textContent = '🔔 Verificar Alertas';
+}
+
+// ── Add ticker ─────────────────────────────────────────────
+document.getElementById('btn-add').onclick = () => {
+  const input = document.getElementById('input-ticker');
+  const ticker = input.value.trim().toUpperCase();
+  if (!ticker || watchlist.includes(ticker)) { input.focus(); return; }
+  watchlist.push(ticker);
+  saveState();
+  renderGrid();
+  input.value = '';
+  input.focus();
+};
+
+document.getElementById('input-ticker').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btn-add').click();
+});
+
+document.getElementById('btn-fetch-all').onclick = fetchAll;
+document.getElementById('btn-check-alerts').onclick = checkAlerts;
+
+// ── Auto scheduler (1h) ────────────────────────────────────
+let schedulerTimer = null;
+function startScheduler() {
+  if (schedulerTimer) clearInterval(schedulerTimer);
+  schedulerTimer = setInterval(() => {
+    if (watchlist.length > 0) fetchAll();
+  }, 60 * 60 * 1000); // 1h
+  document.getElementById('scheduler-badge').title = 'Atualização automática a cada 1 hora';
+}
+startScheduler();
+
+// ── Init ───────────────────────────────────────────────────
+renderGrid();
+renderAlerts();
+if (selected) renderDeltaPanel(selected);
+
+// Auto-load preços do cache ao abrir
+if (Object.keys(priceCache).length > 0) {
+  renderGrid();
+}
+</script>
+
+</body>
+</html>
