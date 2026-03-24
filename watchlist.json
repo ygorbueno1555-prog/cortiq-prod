@@ -1,15 +1,11 @@
 {
   "equity": [
-    {"ticker": "VALE3", "thesis": "Recuperação da demanda chinesa por minério de ferro"},
-    {"ticker": "PETR4", "thesis": ""},
-    {"ticker": "ITUB4", "thesis": ""},
-    {"ticker": "WEGE3", "thesis": ""},
-    {"ticker": "BBDC4", "thesis": ""}
+    {"ticker": "VALE3", "thesis": "Recuperação da demanda chinesa por minério de ferro com retomada do setor imobiliário"},
+    {"ticker": "PETR4", "thesis": "Geração de caixa robusta e dividend yield elevado com disciplina de capital no pré-sal"}
   ],
   "startups": [
-    {"name": "Nubank", "thesis": "Banco digital líder na América Latina"},
-    {"name": "Creditas", "thesis": "Crédito com garantia B2C no Brasil"},
-    {"name": "Pagar.me", "thesis": ""}
+    {"name": "Nagro", "url": "nagro.com.br", "thesis": "Agro-fintech com plataforma de crédito rural e avaliação de risco por IA — complementar à tese de crédito e infra da Drýs"},
+    {"name": "Kamino", "url": "kamino.com.br", "thesis": "Sistema operacional financeiro com IA para CFOs do mid-market brasileiro — sinérgico com a missão da Cortiq de IA para decisão financeira"}
   ],
   "recipients": [],
   "briefing_hour": 7

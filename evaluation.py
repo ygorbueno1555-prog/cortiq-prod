@@ -162,12 +162,16 @@ def evaluate_results(mode: str, results: List[dict], company_domain: str | None 
     missing: List[str] = []
 
     items: List[Dict] = []
-    for block in results:
-        for item in (block or {}).get("results", []):
-            text = " ".join([
-                (item or {}).get("title") or "",
-                (item or {}).get("content") or "",
-            ])
+    for item in results:
+        if not item:
+            continue
+        # Support both flat list (from researcher.py) and nested block format
+        if "results" in item:
+            for sub in (item.get("results") or []):
+                text = " ".join([(sub or {}).get("title") or "", (sub or {}).get("content") or ""])
+                items.append({"url": (sub or {}).get("url") or "", "text": text})
+        else:
+            text = " ".join([(item or {}).get("title") or "", (item or {}).get("content") or ""])
             items.append({"url": (item or {}).get("url") or "", "text": text})
 
     urls = [it["url"] for it in items if it.get("url")]
@@ -208,7 +212,8 @@ def evaluate_results(mode: str, results: List[dict], company_domain: str | None 
 
     coverage_score = round((len(covered) + eval_rules.get("weak_coverage_weight", 0.4) * len(weakly_covered)) / max(1, len(sections)), 2)
 
-    recency_hits = re.findall(r"\b(2024|2025|2026)\b", _normalize_text(results))
+    recency_text = " ".join(it.get("text", "") for it in items).lower()
+    recency_hits = re.findall(r"\b(2024|2025|2026)\b", recency_text)
     recency_score = 1.0 if recency_hits else 0.4
 
     source_score = min(1.0, unique_count / 12)
